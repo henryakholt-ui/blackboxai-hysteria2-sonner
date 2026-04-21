@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app"
 import { getAuth, type Auth } from "firebase/auth"
+import { getFirestore, type Firestore } from "firebase/firestore"
 
 const APP_NAME = "hysteria2-c2-advanced-web"
 
@@ -29,4 +30,8 @@ export function firebaseClientApp(): FirebaseApp {
 
 export function clientAuth(): Auth {
   return getAuth(firebaseClientApp())
+}
+
+export function clientFirestore(): Firestore {
+  return getFirestore(firebaseClientApp())
 }

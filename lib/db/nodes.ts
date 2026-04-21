@@ -31,6 +31,8 @@ export async function createNode(input: NodeCreate): Promise<Node> {
     region: parsed.region,
     listenAddr: parsed.listenAddr ?? ":443",
     status: "stopped",
+    tags: parsed.tags ?? [],
+    provider: parsed.provider,
     lastHeartbeatAt: null,
     createdAt: now(),
     updatedAt: now(),

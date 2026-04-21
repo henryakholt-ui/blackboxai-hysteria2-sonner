@@ -48,6 +48,8 @@ export const Node = z.object({
   region: z.string().max(60).optional(),
   listenAddr: z.string().default(":443"),
   status: NodeStatus.default("stopped"),
+  tags: z.array(z.string().max(40)).default([]),
+  provider: z.string().max(120).optional(),
   lastHeartbeatAt: z.number().int().nullable().default(null),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
@@ -59,11 +61,14 @@ export const NodeCreate = Node.pick({
   hostname: true,
   region: true,
   listenAddr: true,
-})
+  tags: true,
+  provider: true,
+}).partial({ tags: true, provider: true })
 export type NodeCreate = z.infer<typeof NodeCreate>
 
 export const NodeUpdate = NodeCreate.partial().extend({
   status: NodeStatus.optional(),
+  tags: z.array(z.string().max(40)).optional(),
   lastHeartbeatAt: z.number().int().nullable().optional(),
 })
 export type NodeUpdate = z.infer<typeof NodeUpdate>

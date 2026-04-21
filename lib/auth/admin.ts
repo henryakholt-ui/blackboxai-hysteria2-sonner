@@ -25,11 +25,14 @@ function bearerToken(req: NextRequest): string | null {
 
 export async function verifyAdmin(req: NextRequest): Promise<AdminPrincipal> {
   const token = bearerToken(req)
-  if (!token) throw unauthorized("missing bearer token")
-  const decoded = await adminAuth().verifyIdToken(token, true)
-  const isAdmin = decoded.admin === true || decoded.role === "admin"
-  if (!isAdmin) throw forbidden("not an admin")
-  return { uid: decoded.uid, email: decoded.email ?? null }
+  if (token) {
+    const decoded = await adminAuth().verifyIdToken(token, true)
+    const isAdmin = decoded.admin === true || decoded.role === "admin"
+    if (!isAdmin) throw forbidden("not an admin")
+    return { uid: decoded.uid, email: decoded.email ?? null }
+  }
+  // fall back to admin session cookie so browser-based polling works
+  return verifyAdminCookie()
 }
 
 export class HttpError extends Error {
