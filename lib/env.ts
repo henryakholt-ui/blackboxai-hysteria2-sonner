@@ -1,31 +1,40 @@
 import { z } from "zod"
 
-const ServerEnvSchema = z.object({
-  FIREBASE_PROJECT_ID: z.string().min(1).optional(),
-  FIREBASE_CLIENT_EMAIL: z.string().email().optional(),
-  FIREBASE_PRIVATE_KEY: z.string().min(1).optional(),
-  GOOGLE_APPLICATION_CREDENTIALS: z.string().min(1).optional(),
+// Treat empty strings as undefined so `.optional()` fields don't fail when
+// `.env.local` has placeholders like `FOO=` copied from `.env.example`.
+const emptyToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === "" ? undefined : v), schema)
 
-  HYSTERIA_BIN: z.string().min(1).optional(),
-  HYSTERIA_WORK_DIR: z.string().min(1).optional(),
+const optStr = (min = 1) => emptyToUndefined(z.string().min(min).optional())
+const optUrl = () => emptyToUndefined(z.string().url().optional())
+const optEmail = () => emptyToUndefined(z.string().email().optional())
+
+const ServerEnvSchema = z.object({
+  FIREBASE_PROJECT_ID: optStr(),
+  FIREBASE_CLIENT_EMAIL: optEmail(),
+  FIREBASE_PRIVATE_KEY: optStr(),
+  GOOGLE_APPLICATION_CREDENTIALS: optStr(),
+
+  HYSTERIA_BIN: optStr(),
+  HYSTERIA_WORK_DIR: optStr(),
   HYSTERIA_DOWNLOAD_BASE_URL: z
     .string()
     .url()
     .default("https://github.com/apernet/hysteria/releases/download"),
 
-  HYSTERIA_AUTH_BACKEND_SECRET: z.string().min(16).optional(),
+  HYSTERIA_AUTH_BACKEND_SECRET: emptyToUndefined(z.string().min(16).optional()),
   HYSTERIA_TRAFFIC_API_BASE_URL: z
     .string()
     .url()
     .default("http://127.0.0.1:25000"),
-  HYSTERIA_TRAFFIC_API_SECRET: z.string().min(1).optional(),
+  HYSTERIA_TRAFFIC_API_SECRET: optStr(),
 
   NODE_ID: z.string().min(1).default("default"),
 
-  NEXT_PUBLIC_FIREBASE_API_KEY: z.string().min(1).optional(),
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: z.string().min(1).optional(),
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: z.string().min(1).optional(),
-  NEXT_PUBLIC_FIREBASE_APP_ID: z.string().min(1).optional(),
+  NEXT_PUBLIC_FIREBASE_API_KEY: optStr(),
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: optStr(),
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: optStr(),
+  NEXT_PUBLIC_FIREBASE_APP_ID: optStr(),
 
   SESSION_COOKIE_NAME: z.string().min(1).default("__session"),
   SESSION_COOKIE_MAX_AGE_SECONDS: z.coerce
@@ -35,13 +44,15 @@ const ServerEnvSchema = z.object({
     .max(60 * 60 * 24 * 14)
     .default(60 * 60 * 24 * 5),
 
-  HYSTERIA_EGRESS_PROXY_URL: z
-    .string()
-    .regex(/^(https?|socks5h?):\/\/.+/, "must be http(s):// or socks5(h):// URL")
-    .optional(),
+  HYSTERIA_EGRESS_PROXY_URL: emptyToUndefined(
+    z
+      .string()
+      .regex(/^(https?|socks5h?):\/\/.+/, "must be http(s):// or socks5(h):// URL")
+      .optional()
+  ),
 
   LLM_PROVIDER_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
-  LLM_PROVIDER_API_KEY: z.string().min(1).optional(),
+  LLM_PROVIDER_API_KEY: optStr(),
   LLM_MODEL: z.string().min(1).default("gpt-4o-mini"),
   LLM_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
 
