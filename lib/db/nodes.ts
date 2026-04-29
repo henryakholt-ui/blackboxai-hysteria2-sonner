@@ -1,62 +1,94 @@
-import { randomUUID } from "node:crypto"
-import { adminFirestore } from "@/lib/firebase/admin"
-import { Collections, Node, NodeCreate, NodeUpdate } from "@/lib/db/schema"
+import { prisma } from "@/lib/db"
+import type { HysteriaNode } from "@prisma/client"
+import { Node, NodeCreate, NodeUpdate } from "@/lib/db/schema"
 
-function nodesCollection() {
-  return adminFirestore().collection(Collections.nodes)
-}
-
-function now(): number {
-  return Date.now()
+function toNodeZod(row: HysteriaNode): Node {
+  return {
+    id: row.id,
+    name: row.name,
+    hostname: row.hostname,
+    region: row.region ?? undefined,
+    listenAddr: row.listenAddr,
+    status: row.status as Node["status"],
+    tags: JSON.parse(row.tags) as string[],
+    provider: row.provider ?? undefined,
+    profileId: row.profileId ?? null,
+    lastHeartbeatAt: row.lastHeartbeatAt ? row.lastHeartbeatAt.getTime() : null,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+  }
 }
 
 export async function listNodes(): Promise<Node[]> {
-  const snap = await nodesCollection().orderBy("createdAt", "desc").get()
-  return snap.docs.map((d) => Node.parse({ id: d.id, ...d.data() }))
+  const rows = await prisma.hysteriaNode.findMany({ orderBy: { createdAt: "desc" } })
+  return rows.map(toNodeZod)
 }
 
 export async function getNodeById(id: string): Promise<Node | null> {
-  const doc = await nodesCollection().doc(id).get()
-  if (!doc.exists) return null
-  return Node.parse({ id: doc.id, ...doc.data() })
+  const row = await prisma.hysteriaNode.findUnique({ where: { id } })
+  return row ? toNodeZod(row) : null
 }
 
 export async function createNode(input: NodeCreate): Promise<Node> {
   const parsed = NodeCreate.parse(input)
-  const id = randomUUID()
-  const record: Node = Node.parse({
-    id,
-    name: parsed.name,
-    hostname: parsed.hostname,
-    region: parsed.region,
-    listenAddr: parsed.listenAddr ?? ":443",
-    status: "stopped",
-    tags: parsed.tags ?? [],
-    provider: parsed.provider,
-    lastHeartbeatAt: null,
-    createdAt: now(),
-    updatedAt: now(),
+  const row = await prisma.hysteriaNode.create({
+    data: {
+      name: parsed.name,
+      hostname: parsed.hostname,
+      region: parsed.region,
+      listenAddr: parsed.listenAddr ?? ":443",
+      status: "stopped",
+      tags: JSON.stringify(parsed.tags ?? []),
+      provider: parsed.provider,
+    },
   })
-  const { id: _omit, ...rest } = record
-  void _omit
-  await nodesCollection().doc(id).set(rest)
-  return record
+  return toNodeZod(row)
 }
 
 export async function updateNode(id: string, patch: NodeUpdate): Promise<Node | null> {
   const parsed = NodeUpdate.parse(patch)
-  const ref = nodesCollection().doc(id)
-  const existing = await ref.get()
-  if (!existing.exists) return null
-  await ref.update({ ...parsed, updatedAt: now() })
-  const updated = await ref.get()
-  return Node.parse({ id: updated.id, ...updated.data() })
+  const existing = await prisma.hysteriaNode.findUnique({ where: { id } })
+  if (!existing) return null
+
+  const data: Record<string, unknown> = {}
+  if (parsed.name !== undefined) data.name = parsed.name
+  if (parsed.hostname !== undefined) data.hostname = parsed.hostname
+  if (parsed.region !== undefined) data.region = parsed.region
+  if (parsed.listenAddr !== undefined) data.listenAddr = parsed.listenAddr
+  if (parsed.status !== undefined) data.status = parsed.status
+  if (parsed.tags !== undefined) data.tags = JSON.stringify(parsed.tags)
+  if (parsed.provider !== undefined) data.provider = parsed.provider
+  if (parsed.profileId !== undefined) data.profileId = parsed.profileId
+  if (parsed.lastHeartbeatAt !== undefined) {
+    data.lastHeartbeatAt = parsed.lastHeartbeatAt ? new Date(parsed.lastHeartbeatAt) : null
+  }
+
+  const row = await prisma.hysteriaNode.update({ where: { id }, data })
+  return toNodeZod(row)
 }
 
 export async function deleteNode(id: string): Promise<boolean> {
-  const ref = nodesCollection().doc(id)
-  const existing = await ref.get()
-  if (!existing.exists) return false
-  await ref.delete()
-  return true
+  try {
+    await prisma.hysteriaNode.delete({ where: { id } })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function updateNodeHeartbeat(id: string): Promise<void> {
+  await prisma.hysteriaNode.update({
+    where: { id },
+    data: { lastHeartbeatAt: new Date() },
+  })
+}
+
+export async function getNodeStats() {
+  const [total, running, stopped, errored] = await Promise.all([
+    prisma.hysteriaNode.count(),
+    prisma.hysteriaNode.count({ where: { status: "running" } }),
+    prisma.hysteriaNode.count({ where: { status: "stopped" } }),
+    prisma.hysteriaNode.count({ where: { status: "errored" } }),
+  ])
+  return { total, running, stopped, errored }
 }

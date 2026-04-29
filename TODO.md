@@ -1,9 +1,41 @@
-# Sonner Integration & NPM Fix Progress
+# Project TODO
 
-## Steps:
-- [x] 1. Remove unused @uploadthing/react from package.json (not found in package.json; likely in parent/lockfile - use --legacy-peer-deps for npm install)
-- [x] 2. Install sonner dependency ✓
-- [x] 3. Create components/ui/sonner.tsx (shadcn Toaster) ✓
-- [x] 4. Update app/layout.tsx to include Toaster ✓
-- [x] 5. Install deps and test with npm run dev (server running at http://localhost:3000) ✓
-- [ ] 6. Verify toast functionality and complete
+## Overview
+This document tracks pending tasks and future improvements for the Hysteria 2 Admin Panel project.
+
+## Completed Tasks
+- ✅ Phase 2 Implementation: OSINT Domain Enumeration and Threat Intelligence (see PHASE2_IMPLEMENTATION_SUMMARY.md)
+- ✅ AI Workflow Assistant enhancements
+- ✅ Config Audit, Universal Settings, Provider Keys UI
+- ✅ Docker support and deployment scripts
+- ✅ Mail Operations basic functionality
+
+## Current Priorities (From FEATURE_ROADMAP.md)
+
+### Phase 3: Weaponization Arsenal
+- Dynamic Payload Generation (P0)
+- Living-off-the-Land (LotL) Arsenal (P3)
+
+### Phase 4: Delivery & Operations Enhancement
+- Mail Operations Enhancement (P2)
+- Team Coordination (P2)
+- Anti-Forensics Toolkit (P3)
+
+### Phase 5: Reporting & Analytics
+- Behavioral Analytics (P3)
+- Automated Reporting (P2)
+
+### Infrastructure Improvements
+- Traffic Stats API Integration (P1)
+- Config Audit Strength Testing (P1)
+- Network Mapping (P1)
+- Email Harvesting (P1)
+
+## Notes
+- See FEATURE_ROADMAP.md for comprehensive implementation roadmap
+- See PHASE2_IMPLEMENTATION_SUMMARY.md for details on completed reconnaissance features
+- See INFRASTRUCTURE_ARCHITECTURE.md for system architecture documentation
+
+---
+*Last updated: April 2026*
+

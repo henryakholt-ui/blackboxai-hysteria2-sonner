@@ -1,14 +1,12 @@
 "use client"
 
 import { Suspense, useState, useTransition } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { signInWithEmailAndPassword } from "firebase/auth"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { clientAuth } from "@/lib/firebase/client"
 
 export default function LoginPage() {
   return (
@@ -30,7 +28,6 @@ function LoginSkeleton() {
 }
 
 function LoginForm() {
-  const router = useRouter()
   const params = useSearchParams()
   const next = params.get("next") ?? "/admin"
 
@@ -45,13 +42,12 @@ function LoginForm() {
 
     startTransition(async () => {
       try {
-        const cred = await signInWithEmailAndPassword(clientAuth(), email, password)
-        const idToken = await cred.user.getIdToken()
-        const res = await fetch("/api/auth/session", {
+        const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ idToken }),
+          body: JSON.stringify({ username: email, password, next }),
         })
+        
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string }
           const msg = data.error ?? `sign-in failed (${res.status})`
@@ -59,9 +55,20 @@ function LoginForm() {
           toast.error(msg)
           return
         }
-        toast.success("signed in")
-        router.replace(next)
-        router.refresh()
+        
+        const data = await res.json()
+        
+        if (data.success) {
+          toast.success("Login successful! Redirecting...")
+          
+          // Wait a moment for cookies to be set, then redirect
+          setTimeout(() => {
+            window.location.href = data.redirect || "/admin"
+          }, 500)
+        } else {
+          setError("Login failed")
+          toast.error("Login failed")
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "sign-in failed"
         setError(msg)
@@ -74,15 +81,15 @@ function LoginForm() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
-        <CardDescription>Admin access to the Hysteria 2 control panel.</CardDescription>
+        <CardDescription>D-Panel Red Team Operations Platform</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
-              type="email"
+              id="username"
+              type="text"
               autoComplete="username"
               required
               value={email}
