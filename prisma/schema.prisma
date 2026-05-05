@@ -1,0 +1,1100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Operator {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  password    String
+  role        String   @default("OPERATOR")
+  isActive    Boolean  @default(true)
+  permissions String   @default("[]")
+  skills      String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  operations      Operation[]      @relation("OperationOperator")
+  auditLogs       AuditLog[]
+  scheduledReports ScheduledReport[]
+  createdOperations Operation[] @relation("CreatedBy")
+  assignedTasks    Task[]         @relation("TaskAssignee")
+  notifications   Notification[]
+
+  @@map("operators")
+}
+
+model Operation {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("PENETRATION_TEST")
+  priority    String   @default("MEDIUM")
+  status      String   @default("PLANNING")
+  team        String   @default("[]")
+  objectives  Objective[]
+  tasks       Task[]
+  deliverables Deliverable[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  creator     Operator @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  // Relations
+  executiveReports ExecutiveReport[]
+  technicalReports TechnicalReport[]
+  timelineReports  TimelineReport[]
+  reportPackages   ReportPackage[]
+  exfilPlans       ExfilPlan[]
+  intelligence     Intelligence[]
+  operatorId       String?
+  operator         Operator?  @relation("OperationOperator", fields: [operatorId], references: [id])
+
+  @@map("operations")
+}
+
+model Objective {
+  id          String @id @default(cuid())
+  title       String
+  description String
+  completed   Boolean @default(false)
+  operationId String
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("objectives")
+}
+
+model Task {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  status        String   @default("PENDING")
+  priority      String   @default("MEDIUM")
+  assignedTo    String   @default("[]")
+  dependencies  String   @default("[]")
+  estimatedDuration Int
+  actualDuration Int?
+  operationId   String
+  operation     Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  assigneeId    String?
+  assignee      Operator?  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("tasks")
+}
+
+model Deliverable {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  description String
+  status      String   @default("PENDING")
+  operationId String
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("deliverables")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  operatorId  String
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  operator    Operator @relation(fields: [operatorId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model ExecutiveReport {
+  id          String   @id @default(cuid())
+  title       String
+  operationId String
+  generatedAt DateTime @default(now())
+  period      Json
+  summary     Json
+  keyFindings Json
+  riskAssessment Json
+  recommendations Json
+  nextSteps   Json
+  appendix    Json
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("executive_reports")
+}
+
+model TechnicalReport {
+  id          String   @id @default(cuid())
+  title       String
+  operationId String
+  generatedAt DateTime @default(now())
+  methodology Json
+  findings    Json
+  vulnerabilities Json
+  exploits    Json
+  evidence    Json
+  tools       Json
+  conclusions Json
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("technical_reports")
+}
+
+model TimelineReport {
+  id          String   @id @default(cuid())
+  title       String
+  operationId String
+  generatedAt DateTime @default(now())
+  events      Json
+  milestones  Json
+  activities  Json
+  communications Json
+  decisions   Json
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("timeline_reports")
+}
+
+model ReportPackage {
+  id          String   @id @default(cuid())
+  operationId String
+  generatedAt DateTime @default(now())
+  reports     Json
+  evidence    Json
+  metadata    Json
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("report_packages")
+}
+
+model ScheduledReport {
+  id          String   @id @default(cuid())
+  operationId String
+  reportType  String
+  frequency   String
+  schedule    String
+  recipients  String   @default("[]")
+  options     Json?
+  isActive    Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  operator    Operator @relation(fields: [createdBy], references: [id])
+
+  @@map("scheduled_reports")
+}
+
+model ExfilPlan {
+  id          String   @id @default(cuid())
+  operationId String
+  team        String   @default("[]")
+  data        Json
+  dataTypes   String   @default("[]")
+  methods     Json
+  status      String   @default("PLANNING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@map("exfil_plans")
+}
+
+model Intelligence {
+  id          String   @id @default(cuid())
+  type        String
+  title       String
+  content     String
+  source      String
+  confidence  Int
+  relevance   Int
+  tags        String   @default("[]")
+  operationIds String   @default("[]")
+  sharedAt    DateTime @default(now())
+  operationId String?
+  operation   Operation? @relation(fields: [operationId], references: [id])
+
+  @@map("intelligence")
+}
+
+model TransportProtocol {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        String
+  config      Json
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("transport_protocols")
+}
+
+model Payload {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  loaderType  String
+  config      Json
+  obfuscated  Boolean  @default(false)
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("payloads")
+}
+
+model Implant {
+  id              String   @id @default(cuid())
+  implantId       String   @unique
+  name            String
+  type            String
+  architecture    String
+  targetId        String?
+  status          String   @default("active")
+  lastSeen        DateTime?
+  firstSeen       DateTime @default(now())
+  config          Json
+  transportConfig Json
+  nodeId          String?
+  node            HysteriaNode? @relation(fields: [nodeId], references: [id])
+  tasks           ImplantTask[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("implants")
+}
+
+model ImplantTask {
+  id          String   @id @default(cuid())
+  implantId   String
+  implant     Implant  @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  taskId      String
+  type        String
+  args        Json
+  status      String   @default("pending")
+  result      Json?
+  error       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([implantId, status])
+  @@index([implantId, createdAt(sort: Desc)])
+  @@map("implant_tasks")
+}
+
+model PayloadBuild {
+  id              String   @id @default(cuid())
+  name            String
+  type            String
+  description     String?
+  status          String   @default("pending")
+  config          Json
+  downloadUrl     String?
+  sizeBytes       BigInt?
+  buildLogs       Json     @default("[]")
+  errorMessage    String?
+  implantBinaryPath String?
+  md5Hash         String?
+  sha256Hash      String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdBy])
+  @@map("payload_builds")
+}
+
+model OSINTData {
+  id          String   @id @default(cuid())
+  type        String
+  target      String
+  data        Json
+  source      String
+  confidence  Int
+  collectedAt DateTime @default(now())
+
+  @@map("osint_data")
+}
+
+model NetworkMap {
+  id          String   @id @default(cuid())
+  target      String
+  topology    Json
+  services    Json
+  dataFlows   Json
+  scannedAt   DateTime @default(now())
+
+  @@map("network_maps")
+}
+
+model LotLTool {
+  id          String   @id @default(cuid())
+  name        String
+  binaryPath  String
+  description String
+  category    String
+  risk        String
+  createdAt   DateTime @default(now())
+
+  @@map("lotl_tools")
+}
+
+model ForensicsAction {
+  id          String   @id @default(cuid())
+  type        String
+  target      String
+  parameters  Json
+  status      String   @default("PENDING")
+  executedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("forensics_actions")
+}
+
+model ThreatIntel {
+  id          String   @id @default(cuid())
+  source      String
+  type        String
+  indicator   String
+  data        Json
+  confidence  Int
+  severity    String
+  createdAt   DateTime @default(now())
+
+  @@map("threat_intel")
+}
+
+model BehaviorPattern {
+  id          String   @id @default(cuid())
+  userId      String
+  pattern     Json
+  anomaly     Boolean  @default(false)
+  confidence  Float
+  detectedAt  DateTime @default(now())
+
+  @@map("behavior_patterns")
+}
+
+// ---------------------------------------------------------------------------
+// Models replacing Firebase Firestore collections & in-memory mock stores
+// ---------------------------------------------------------------------------
+
+model ClientUser {
+  id          String    @id @default(cuid())
+  displayName String
+  authToken   String    @unique
+  status      String    @default("active")
+  quotaBytes  BigInt?
+  usedBytes   BigInt    @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  notes       String?
+
+  @@map("client_users")
+}
+
+model HysteriaNode {
+  id              String    @id @default(cuid())
+  name            String
+  hostname        String
+  region          String?
+  listenAddr      String    @default(":443")
+  status          String    @default("stopped")
+  tags            String    @default("[]")
+  provider        String?
+  profileId       String?
+  lastHeartbeatAt DateTime?
+  // Proxy configuration for dynamic proxy management
+  socksProxyUrl   String?   // SOCKS5 proxy URL (e.g., socks5://127.0.0.1:1080)
+  httpProxyUrl    String?   // HTTP/HTTPS proxy URL (e.g., http://127.0.0.1:8080)
+  proxyHealthStatus String? @default("unknown") // unknown, healthy, unhealthy, checking
+  lastHealthCheck  DateTime? // Timestamp of last health check
+  proxyPriority   Int       @default(0) // Lower value = higher priority for failover
+  proxyResponseTimeMs Int?  // Average response time in milliseconds
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  implants        Implant[]
+
+  @@map("nodes")
+}
+
+model HysteriaServerConfig {
+  id                  String   @id @default("current")
+  listen              String   @default(":443")
+  tls                 Json
+  obfs                Json?
+  bandwidth           Json?
+  masquerade          Json?
+  trafficStats        Json
+  authBackendUrl      String
+  authBackendInsecure Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+
+  @@map("server_configs")
+}
+
+model UsageRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  nodeId     String
+  tx         Int
+  rx         Int
+  capturedAt DateTime @default(now())
+
+  @@index([userId, capturedAt(sort: Desc)])
+  @@map("usage_records")
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  description String   @default("")
+  nodeIds     String   @default("[]")
+  config      Json     @default("{}")
+  tags        String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model AiConversation {
+  id        String       @id @default(cuid())
+  title     String       @default("New conversation")
+  createdBy String
+  tags      String[]     @default([])
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  messages  AiMessage[]
+
+  @@index([createdBy, updatedAt(sort: Desc)])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String?
+  toolCalls      Json?
+  toolResult     Json?
+  sortOrder      Int
+  timestamp      DateTime       @default(now())
+
+  @@index([conversationId, sortOrder])
+  @@map("ai_messages")
+}
+
+model AgentTask {
+  id           String      @id @default(cuid())
+  status       String      @default("queued")
+  prompt       String
+  model        String
+  allowedTools String      @default("[]")
+  maxSteps     Int
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  finishedAt   DateTime?
+  createdBy    String
+  result       String?
+  error        String?
+  stepCount    Int         @default(0)
+  steps        AgentStep[]
+
+  @@map("agent_tasks")
+}
+
+model AgentStep {
+  id        String    @id @default(cuid())
+  taskId    String
+  task      AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  index     Int
+  kind      String
+  at        DateTime  @default(now())
+  content   String
+  tool      String?
+  arguments Json?
+  result    Json?
+
+  @@unique([taskId, index])
+  @@map("agent_steps")
+}
+
+model OsintTask {
+  id          String   @id @default(cuid())
+  type        String   // domain, email, social, darkweb, threatintel
+  target      String
+  status      String   @default("pending") // pending, running, completed, failed
+  results     Json?
+  error       String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  metadata    Json?
+
+  @@map("osint_tasks")
+}
+
+model WorkflowSession {
+  id              String   @id @default(cuid())
+  userId          String
+  status          String   @default("initialized") // initialized, awaiting_input, processing, executing, completed, failed, cancelled
+  currentStepOrder Int     @default(0)
+  workflowType    String?
+  context         Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+  steps           WorkflowStep[]
+
+  @@map("workflow_sessions")
+}
+
+model WorkflowStep {
+  id                String   @id @default(cuid())
+  sessionId         String
+  session           WorkflowSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type              String   // ai_question, user_response, backend_execution, result_display, error_handling
+  order             Int
+  content           String?
+  aiPrompt          String?
+  userResponse      String?
+  functionToExecute String?
+  functionParameters Json?
+  executionResult   Json?
+  error             String?
+  timestamp         DateTime @default(now())
+  completed         Boolean  @default(false)
+
+  @@map("workflow_steps")
+}
+
+model BackendFunction {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String
+  category       String
+  parameters     Json     @default("[]")
+  implementation String
+  requiresAuth   Boolean  @default(true)
+  dangerous      Boolean  @default(false)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("backend_functions")
+}
+
+model ScheduledWorkflow {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  description     String?
+  initialRequest  String
+  scheduledFor    DateTime
+  interval        String?  // cron expression or interval (e.g., "0 9 * * *" for daily at 9am, "1h" for hourly)
+  status          String   @default("pending") // pending, running, completed, failed, cancelled
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  runCount        Int      @default(0)
+  context         Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("scheduled_workflows")
+}
+
+// ShadowGrok-specific models for autonomous C2 operations
+
+model ShadowGrokExecution {
+  id              String   @id @default(cuid())
+  conversationId  String?
+  userId          String
+  userMessage     String
+  finalResponse   String
+  model           String
+  toolExecutions  Int      @default(0)
+  successfulExecutions Int   @default(0)
+  failedExecutions Int     @default(0)
+  approvalRequired Boolean @default(false)
+  status          String   @default("completed") // completed, failed, pending_approval, cancelled
+  error           String?
+  executionTimeMs Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  toolCalls       ShadowGrokToolCall[]
+
+  @@map("shadowgrok_executions")
+}
+
+model ShadowGrokToolCall {
+  id              String   @id @default(cuid())
+  executionId     String
+  execution       ShadowGrokExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  toolName        String
+  arguments       Json
+  result          Json?
+  success         Boolean
+  requiresApproval Boolean @default(false)
+  approvalGranted Boolean?
+  approvedBy      String?
+  approvedAt      DateTime?
+  executionTimeMs Int?
+  error           String?
+  executedAt      DateTime @default(now())
+
+  @@map("shadowgrok_tool_calls")
+}
+
+model ShadowGrokApproval {
+  id              String   @id @default(cuid())
+  toolCallId      String
+  toolName        String
+  arguments       Json
+  requestedBy     String
+  requestedAt     DateTime @default(now())
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedBy      String?
+  rejectedAt      DateTime?
+  reason          String?
+  status          String   @default("pending") // pending, approved, rejected, expired
+  expiresAt       DateTime?
+
+  @@map("shadowgrok_approvals")
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  userId          String
+  token           String   @unique
+  name            String?
+  tags            String   @default("[]") // JSON array of tags
+  formats         String   @default("[]") // JSON array of formats (hysteria2, clash, singbox, etc.)
+  expiresAt       DateTime?
+  autoRotate      Boolean  @default(true)
+  lastRotatedAt   DateTime?
+  status          String   @default("active") // active, expired, revoked, suspended
+  usageStats      Json     @default("{}") // { totalBytes: 0, connectionCount: 0, lastUsed: null }
+  metadata        Json     @default("{}") // Additional subscription metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  type      String   // tunnel_script | notification
+  tunnelType String?
+  nodeId    String?
+  notificationType String?
+  messageId String?
+  sentAt    DateTime @default(now())
+
+  @@index([to, sentAt])
+  @@map("email_logs")
+}
+
+model EmailCampaign {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  status            String   @default("draft") // draft | scheduled | running | completed | paused | failed
+  provider          String   @default("smtp") // smtp | resend | mysmtp
+  tunnelScriptType  String   @default("hysteria2") // hysteria2 | hysteria2-obfs | multi-hop | shadowsocks | vmess
+  nodeId            String?
+  targetDomains     String   @default("[]") // JSON array of domains
+  harvestedEmails   Json     @default("[]") // JSON array of extracted emails with metadata
+  selectedEmails    String   @default("[]") // JSON array of selected email addresses
+  totalRecipients   Int      @default(0)
+  sentCount         Int      @default(0)
+  failedCount       Int      @default(0)
+  scheduledFor      DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  metadata          Json     @default("{}") // Additional campaign configuration
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([createdBy])
+  @@map("email_campaigns")
+}
+
+model EmailHarvestResult {
+  id          String   @id @default(cuid())
+  campaignId  String?
+  target      String
+  emails      Json     @default("[]") // Extracted emails with metadata
+  sources     String   @default("[]") // JSON array of sources used
+  totalEmails Int      @default(0)
+  highConfidence Int   @default(0)
+  mediumConfidence Int @default(0)
+  lowConfidence Int   @default(0)
+  harvestedAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([target])
+  @@map("email_harvest_results")
+}
+
+// ---------------------------------------------------------------------------
+// Multi-Agent Swarm Architecture Models
+// ---------------------------------------------------------------------------
+
+model SwarmAgent {
+  id              String   @id @default(cuid())
+  agentId         String   @unique
+  name            String
+  type            String   // recon, evasion, exfiltration, persistence, orchestrator, etc.
+  version         String   @default("1.0.0")
+  llmModel        String
+  capabilities    Json     @default("[]") // AgentCapability[]
+  maxConcurrentTasks Int   @default(5)
+  resourceLimits  Json     @default("{}") // Resource limits
+  securityLevel   String   @default("medium") // low, medium, high, critical
+  priority        Int      @default(5) // 1-10
+  status          String   @default("initializing") // initializing, idle, busy, offline, degraded, error
+  currentTasks    String   @default("[]") // Task IDs
+  completedTasks  Int      @default(0)
+  failedTasks     Int      @default(0)
+  averageResponseTime Int  @default(0)
+  lastHeartbeat   DateTime @default(now())
+  uptime          BigInt   @default(0)
+  reputation      Float    @default(1.0) // 0-1
+  load            Float    @default(0) // 0-1
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([status])
+  @@map("swarm_agents")
+}
+
+model SwarmOperation {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  objectives      Json     @default("[]") // String[]
+  status          String   @default("planning") // planning, negotiating, executing, monitoring, completed, failed
+  priority        String   @default("normal") // critical, high, normal, low
+  tasks           SwarmTask[]
+  assignedAgents  String   @default("[]") // Agent IDs
+  createdAt       DateTime @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdBy       String
+  constraints     Json     @default("{}") // Operation constraints
+  metadata        Json     @default("{}")
+
+  @@index([status, priority])
+  @@index([createdBy])
+  @@map("swarm_operations")
+}
+
+model SwarmTask {
+  id              String   @id @default(cuid())
+  operationId     String
+  operation       SwarmOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  title           String
+  description     String
+  type            String
+  priority        String   @default("normal") // critical, high, normal, low
+  requiredCapabilities String @default("[]") // Capability names
+  assignedAgent   String?
+  status          String   @default("pending") // pending, assigned, in_progress, completed, failed
+  dependencies    String   @default("[]") // Task IDs
+  estimatedDuration Int
+  actualDuration  Int?
+  createdAt       DateTime @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  result          Json?
+  error           String?
+  metadata        Json     @default("{}")
+
+  @@index([operationId, status])
+  @@index([assignedAgent, status])
+  @@map("swarm_tasks")
+}
+
+model SwarmNegotiation {
+  id              String   @id @default(cuid())
+  operationId     String
+  proposingAgent  String
+  proposalType    String // resource_allocation, approach_selection, timeline_adjustment
+  proposal        Json
+  estimatedCost   Int      @default(0)
+  estimatedBenefit Int     @default(0)
+  confidence      Float    @default(0.8)
+  timestamp       DateTime @default(now())
+  expiresAt       DateTime
+  status          String   @default("pending") // pending, accepted, rejected, countered
+  responses       Json     @default("[]") // NegotiationResponse[]
+  metadata        Json     @default("{}")
+
+  @@index([operationId, status])
+  @@index([proposingAgent])
+  @@map("swarm_negotiations")
+}
+
+model SwarmVoting {
+  id              String   @id @default(cuid())
+  subject         String
+  votingMechanism String   @default("majority") // unanimous, majority, weighted, delegated
+  initiatedBy     String
+  initiatedAt     DateTime @default(now())
+  expiresAt       DateTime
+  options         Json     @default("[]") // Voting options
+  participants    Json     @default("[]") // Participants and votes
+  status          String   @default("ongoing") // ongoing, completed, failed
+  result          String?
+  quorumRequired  Int      @default(1)
+  quorumReached   Boolean  @default(false)
+  metadata        Json     @default("{}")
+
+  @@index([status])
+  @@index([initiatedBy])
+  @@map("swarm_votings")
+}
+
+model SwarmConflictResolution {
+  id              String   @id @default(cuid())
+  conflictType    String
+  conflictingAgents String  @default("[]") // Agent IDs
+  strategy        String // priority, auction, temporal, escalation
+  initiatedBy     String
+  timestamp       DateTime @default(now())
+  resolution      Json?
+  outcome         String   @default("pending") // resolved, escalated, deferred
+  reasoning       String?
+  metadata        Json     @default("{}")
+
+  @@index([outcome])
+  @@map("swarm_conflict_resolutions")
+}
+
+model SwarmKnowledgeBase {
+  id              String   @id @default(cuid())
+  type            String // technique, pattern, lesson, configuration
+  title           String
+  content         Json
+  tags            String   @default("[]") // String[]
+  sourceAgent     String?
+  operationId     String?
+  successRate     Float    @default(0)
+  usageCount      Int      @default(0)
+  lastUsed        DateTime?
+  confidence      Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  metadata        Json     @default("{}")
+
+  @@index([type])
+  @@index([tags])
+  @@map("swarm_knowledge_base")
+}
+
+model SwarmExperience {
+  id              String   @id @default(cuid())
+  agentId         String
+  operationId     String
+  taskType        String
+  approach        String
+  outcome         String   // success, failure, partial
+  duration        Int
+  resourceUsage   Float
+  lessons         String   @default("[]") // String[]
+  timestamp       DateTime @default(now())
+  confidence      Float    @default(0)
+  metadata        Json     @default("{}")
+
+  @@index([agentId, timestamp])
+  @@index([operationId])
+  @@map("swarm_experiences")
+}
+
+model SwarmEvent {
+  id              String   @id @default(cuid())
+  type            String // agent_registered, task_completed, etc.
+  timestamp       DateTime @default(now())
+  source          String
+  data            Json
+  metadata        Json     @default("{}")
+
+  @@index([type, timestamp])
+  @@index([source])
+  @@map("swarm_events")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  operatorId  String
+  operator    Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  type        String   // info, warning, error, success
+  title       String
+  message     String
+  metadata    Json?    @default("{}")
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([operatorId, read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Post-Exploitation & Lateral Movement Models
+// ---------------------------------------------------------------------------
+
+model CompromisedHost {
+  id              String   @id @default(cuid())
+  hostname        String
+  ipAddress       String
+  os              String?
+  domain          String?
+  privileges      String   @default("user")
+  implantId       String?
+  firstCompromised DateTime @default(now())
+  lastSeen        DateTime @updatedAt
+  credentials     Credential[] @relation("CompromisedHostCredentials")
+  credentialSources Credential[] @relation("CredentialSource")
+  pivotPathsFrom   PivotPath[] @relation("FromHost")
+  pivotPathsTo     PivotPath[] @relation("ToHost")
+
+  @@index([ipAddress])
+  @@index([domain])
+  @@index([implantId])
+  @@map("compromised_hosts")
+}
+
+model Credential {
+  id              String   @id @default(cuid())
+  type            String   // NTLM, Kerberos, Plaintext, Hash, Ticket
+  username        String
+  password        String?  // encrypted
+  hash            String?
+  domain          String?
+  sourceHostId    String?
+  sourceHost      CompromisedHost? @relation("CredentialSource", fields: [sourceHostId], references: [id])
+  compromisedHosts CompromisedHost[] @relation("CompromisedHostCredentials")
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([username])
+  @@index([domain])
+  @@index([sourceHostId])
+  @@map("credentials")
+}
+
+model PivotPath {
+  id              String   @id @default(cuid())
+  fromHostId      String
+  toHostId        String
+  technique       String   // smb, winrm, pth, kerberoast, etc.
+  success         Boolean
+  timestamp       DateTime @default(now())
+  fromHost        CompromisedHost @relation("FromHost", fields: [fromHostId], references: [id])
+  toHost          CompromisedHost @relation("ToHost", fields: [toHostId], references: [id])
+
+  @@index([fromHostId])
+  @@index([toHostId])
+  @@index([technique])
+  @@map("pivot_paths")
+}
+
+model LateralMovementSession {
+  id              String   @id @default(cuid())
+  workflowSessionId String?
+  targetDomain    String?
+  status          String   @default("running")
+  discoveredHosts Int      @default(0)
+  compromisedHosts Int     @default(0)
+  credentialsFound Int     @default(0)
+  startTime       DateTime @default(now())
+  endTime         DateTime?
+  summary         Json?
+
+  @@index([workflowSessionId])
+  @@index([status])
+  @@index([startTime])
+  @@map("lateral_movement_sessions")
+}
+
+model KerberosTicket {
+  id              String   @id @default(cuid())
+  ticketType      String   // TGS, AS-REP
+  spn             String
+  accountName     String
+  domain          String
+  ticketData      String   @db.Text
+  crackStatus     String   @default("pending") // pending, cracking, cracked, failed
+  crackedHash     String?
+  sourceHostId    String?
+  createdAt       DateTime @default(now())
+
+  @@index([ticketType])
+  @@index([accountName])
+  @@index([domain])
+  @@index([crackStatus])
+  @@index([sourceHostId])
+  @@map("kerberos_tickets")
+}
+
+model BloodHoundNode {
+  id              String   @id @default(cuid())
+  objectId        String   @unique
+  name            String
+  type            String   // User, Computer, Group, GPO, Domain, OU
+  properties      Json
+  labels          String[] @default([])
+  domain          String?
+  createdAt       DateTime @default(now())
+
+  @@index([objectId])
+  @@index([type])
+  @@index([domain])
+  @@map("bloodhound_nodes")
+}
+
+model BloodHoundEdge {
+  id              String   @id @default(cuid())
+  sourceId        String
+  targetId        String
+  edgeType        String
+  aclRights       String?
+  createdAt       DateTime @default(now())
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([edgeType])
+  @@map("bloodhound_edges")
+}

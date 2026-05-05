@@ -3,8 +3,9 @@ import { verifyAdmin, toErrorResponse } from "@/lib/auth/admin"
 import {
   listConversations,
   createConversation,
+  updateConversation,
 } from "@/lib/ai/conversations"
-import { AiConversationCreate } from "@/lib/ai/types"
+import { AiConversationCreate, AiConversationUpdate } from "@/lib/ai/types"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic"
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const admin = await verifyAdmin(req)
-    const conversations = await listConversations(admin.uid)
+    const conversations = await listConversations(admin.id)
     return NextResponse.json({ conversations })
   } catch (err) {
     return toErrorResponse(err)
@@ -24,8 +25,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const admin = await verifyAdmin(req)
     const body = await req.json()
     const input = AiConversationCreate.parse(body)
-    const conversation = await createConversation(input, admin.uid)
+    const conversation = await createConversation(input, admin.id)
     return NextResponse.json({ conversation }, { status: 201 })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+}
+
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  try {
+    const admin = await verifyAdmin(req)
+    const body = await req.json()
+    const { conversationId, ...updateData } = body
+    const input = AiConversationUpdate.parse(updateData)
+    
+    if (!conversationId) {
+      return NextResponse.json({ error: "conversationId is required" }, { status: 400 })
+    }
+    
+    const conversation = await updateConversation(conversationId, input, admin.id)
+    return NextResponse.json({ conversation })
   } catch (err) {
     return toErrorResponse(err)
   }

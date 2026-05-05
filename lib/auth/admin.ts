@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { adminAuth } from "@/lib/firebase/admin"
 import { readSession } from "@/lib/auth/session"
+import { getOperatorFromAccessToken, extractTokenFromRequest } from "@/lib/auth/jwt"
+import logger from "@/lib/logger"
+
+const log = logger.child({ module: "auth" })
 
 export type AdminPrincipal = {
-  uid: string
-  email: string | null
+  id: string
+  username: string
+  role: string
 }
 
 export async function verifyAdminCookie(): Promise<AdminPrincipal> {
   const session = await readSession()
   if (!session) throw unauthorized("no session")
-  if (!session.isAdmin) throw forbidden("not an admin")
-  return { uid: session.uid, email: session.email }
+  if (session.role !== "ADMIN") throw forbidden("not an admin")
+  return { id: session.id, username: session.username, role: session.role }
 }
 
 function bearerToken(req: NextRequest): string | null {
@@ -24,12 +28,11 @@ function bearerToken(req: NextRequest): string | null {
 }
 
 export async function verifyAdmin(req: NextRequest): Promise<AdminPrincipal> {
-  const token = bearerToken(req)
+  const token = bearerToken(req) || extractTokenFromRequest(req)
   if (token) {
-    const decoded = await adminAuth().verifyIdToken(token, true)
-    const isAdmin = decoded.admin === true || decoded.role === "admin"
-    if (!isAdmin) throw forbidden("not an admin")
-    return { uid: decoded.uid, email: decoded.email ?? null }
+    const operator = await getOperatorFromAccessToken(token)
+    if (operator.role !== "ADMIN") throw forbidden("not an admin")
+    return { id: operator.id, username: operator.username, role: operator.role }
   }
   // fall back to admin session cookie so browser-based polling works
   return verifyAdminCookie()
@@ -45,10 +48,12 @@ export class HttpError extends Error {
 }
 
 export function unauthorized(msg = "unauthorized"): HttpError {
+  log.warn({ msg }, "unauthorized")
   return new HttpError(401, msg)
 }
 
 export function forbidden(msg = "forbidden"): HttpError {
+  log.warn({ msg }, "forbidden")
   return new HttpError(403, msg)
 }
 
@@ -57,5 +62,6 @@ export function toErrorResponse(err: unknown): NextResponse {
     return NextResponse.json({ error: err.message }, { status: err.status })
   }
   const message = err instanceof Error ? err.message : "internal error"
+  log.error({ err }, message)
   return NextResponse.json({ error: message }, { status: 500 })
 }

@@ -1,0 +1,16 @@
+.git
+.next
+.worktrees
+.DS_Store
+node_modules
+config/ssl
+.env
+.env.local
+.env.production
+cookies.txt
+*.tsbuildinfo
+deployments/artifacts/*.tar.gz
+mailer-service/mailer-service
+implant/**/*.tar.gz
+config/*-firebase-adminsdk-*.json
+deployments/artifacts/ec2-user@ec2-*

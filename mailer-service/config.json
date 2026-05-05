@@ -1,0 +1,5 @@
+{
+  "workers": 1,
+  "delay_ms": 1500,
+  "max_msgs_per_account": 500
+}

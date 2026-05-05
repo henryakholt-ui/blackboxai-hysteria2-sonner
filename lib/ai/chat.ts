@@ -1,30 +1,76 @@
-import { chatComplete, type ChatMessage } from "@/lib/agents/llm"
+import { chatComplete, type ChatMessage } from "@/lib/ai/llm"
 import { aiToolDefinitions, runAiTool } from "@/lib/ai/tools"
 import { appendMessages, getConversation } from "@/lib/ai/conversations"
 import type { AiMessage } from "@/lib/ai/types"
+import { buildSystemPrompt, Role } from "@/lib/ai/system-prompt"
 
-const MAX_TOOL_ROUNDS = 10
+const MAX_TOOL_ROUNDS = 15
 
-const SYSTEM_PROMPT = [
-  "You are a multi-tool operations assistant inside a Hysteria 2 admin panel.",
-  "You help administrators manage their Hysteria2 proxy infrastructure.",
-  "",
-  "Available capabilities:",
-  "- Generate Hysteria2 server configurations from natural language descriptions",
-  "- Analyze traffic stats to find anomalies (high bandwidth users, expired/disabled users still online)",
-  "- Suggest masquerade proxy targets (CDN, video, cloud, general)",
-  "- Troubleshoot server issues (TLS, throughput, connectivity, auth)",
-  "- List configuration profiles",
-  "- View server logs",
-  "",
-  "Guidelines:",
-  "- Use tools to gather real data before answering questions about the system state.",
-  "- When generating configs, always remind the admin to review before applying.",
-  "- Be concise and actionable. Prefer tool calls over speculation.",
-  "- If you cannot accomplish something with the available tools, say so clearly.",
-  "- Format configs and technical output in code blocks.",
-  "- Do not attempt to evade rate limits or bypass access controls on external sites.",
-].join("\n")
+type ProgressCallback = (progress: {
+  type: "step" | "tool_start" | "tool_complete" | "tool_error"
+  step?: string
+  toolName?: string
+  toolArgs?: string
+  toolResult?: string
+}) => Promise<void> | void
+
+// Format tool results for human-readable summary
+function formatToolResultSummary(toolName: string, result: unknown): string {
+  if (toolName === "generate_payload") {
+    const r = result as { buildId: string; preview: { name: string; type: string; status: string }; explanation: string }
+    return `**Payload Build Started**
+
+**Build ID**: \`${r.buildId}\`
+**Name**: ${r.preview.name}
+**Type**: ${r.preview.type.replace("_", " ").toUpperCase()}
+**Status**: ${r.preview.status}
+
+${r.explanation}
+
+The build is now in progress. Use "Check status of ${r.buildId}" to see when it's ready for download.`
+  }
+  
+  if (toolName === "list_payloads") {
+    const r = result as { payloads: Array<{ id: string; name: string; type: string; status: string; sizeBytes?: number }>; total: number }
+    if (r.payloads.length === 0) {
+      return "No payload builds found. Generate one with: \"Build a Windows EXE payload\""
+    }
+    const list = r.payloads.map(p => 
+      `- **${p.name}** (\`${p.id.slice(0, 8)}\`) — ${p.type.replace("_", " ").toUpperCase()} — ${p.status}${p.sizeBytes ? ` — ${(p.sizeBytes / 1024 / 1024).toFixed(1)} MB` : ""}`
+    ).join("\n")
+    return `**Your Payload Builds** (${r.total} total)\n\n${list}`
+  }
+  
+  return `Tool \`${toolName}\` executed successfully.`
+}
+
+// Simple rule-based payload intent detection (used when LLM unavailable)
+function detectPayloadIntent(message: string): { toolName: string; args: Record<string, unknown> } | null {
+  const lower = message.toLowerCase()
+  
+  // List payloads intent
+  if (lower.includes("list") && (lower.includes("payload") || lower.includes("build"))) {
+    return { toolName: "list_payloads", args: { limit: 20 } }
+  }
+  
+  // Generate payload intent
+  if (lower.includes("generate") || lower.includes("build") || lower.includes("create")) {
+    if (lower.includes("payload") || lower.includes("exe") || lower.includes("elf") || 
+        lower.includes("powershell") || lower.includes("python") || lower.includes("script")) {
+      return { toolName: "generate_payload", args: { description: message } }
+    }
+  }
+  
+  // Get payload status intent
+  if ((lower.includes("status") || lower.includes("ready") || lower.includes("done")) && 
+      (lower.includes("payload") || lower.includes("build"))) {
+    return { toolName: "list_payloads", args: { limit: 10 } }
+  }
+  
+  return null
+}
+
+const SYSTEM_PROMPT = buildSystemPrompt(Role.Chat)
 
 /**
  * Run a multi-turn chat with tool calling. Appends the user message and all
@@ -35,6 +81,7 @@ export async function runChat(
   conversationId: string,
   userMessage: string,
   invokerUid: string,
+  onProgress?: ProgressCallback,
 ): Promise<{ messages: AiMessage[]; error?: string }> {
   const conversation = await getConversation(conversationId)
   if (!conversation) {
@@ -85,12 +132,81 @@ export async function runChat(
   const newMessages: AiMessage[] = [userMsg]
 
   try {
+    await onProgress?.({ type: "step", step: "Thinking about your request..." })
+    
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const result = await chatComplete({
-        messages: llmMessages,
-        tools,
-        temperature: 0.3,
-      })
+      let result: { content: string | null; toolCalls: { id: string; type: "function"; function: { name: string; arguments: string } }[]; finishReason: string | null }
+      
+      try {
+        result = await chatComplete({
+          messages: llmMessages,
+          tools,
+          temperature: 0.3,
+          useShadowGrok: true, // Use xAI Grok by default for chat
+        })
+      } catch (llmErr) {
+        // LLM unavailable - try rule-based fallback for payload intents
+        const payloadIntent = detectPayloadIntent(userMessage)
+        if (payloadIntent) {
+          await onProgress?.({ 
+            type: "tool_start", 
+            toolName: payloadIntent.toolName,
+            toolArgs: JSON.stringify(payloadIntent.args)
+          })
+          
+          // Execute the tool directly
+          const toolResult = await runAiTool(
+            payloadIntent.toolName,
+            payloadIntent.args,
+            { signal: AbortSignal.timeout(60_000), invokerUid }
+          )
+          
+          await onProgress?.({ 
+            type: "tool_complete", 
+            toolName: payloadIntent.toolName,
+            toolResult: JSON.stringify(toolResult)
+          })
+          
+          // Create synthetic responses
+          const assistantMsg: AiMessage = {
+            role: "assistant",
+            content: `I'll help you with that. Executing ${payloadIntent.toolName}...`,
+            toolCalls: [{
+              id: `fallback-${Date.now()}`,
+              name: payloadIntent.toolName,
+              arguments: JSON.stringify(payloadIntent.args),
+            }],
+            timestamp: Date.now(),
+          }
+          newMessages.push(assistantMsg)
+          
+          const toolMsg: AiMessage = {
+            role: "tool",
+            content: null,
+            toolResult: {
+              toolCallId: `fallback-${Date.now()}`,
+              name: payloadIntent.toolName,
+              content: JSON.stringify(toolResult),
+            },
+            timestamp: Date.now(),
+          }
+          newMessages.push(toolMsg)
+          
+          // Add final summary message
+          const summaryMsg: AiMessage = {
+            role: "assistant",
+            content: formatToolResultSummary(payloadIntent.toolName, toolResult),
+            timestamp: Date.now(),
+          }
+          newMessages.push(summaryMsg)
+          
+          await appendMessages(conversationId, newMessages)
+          return { messages: newMessages }
+        }
+        
+        // No payload intent detected, re-throw the LLM error
+        throw llmErr
+      }
 
       if (result.toolCalls.length > 0) {
         // Assistant message with tool calls
@@ -111,8 +227,13 @@ export async function runChat(
           tool_calls: result.toolCalls,
         })
 
-        // Execute each tool call
-        for (const call of result.toolCalls) {
+        // Execute each tool call (parallel for independent tools)
+        const toolExecutionPromises = result.toolCalls.map(async (call) => {
+          await onProgress?.({ 
+            type: "tool_start", 
+            toolName: call.function.name,
+            toolArgs: call.function.arguments
+          })
           let parsedArgs: unknown = {}
           try {
             parsedArgs = call.function.arguments
@@ -127,31 +248,51 @@ export async function runChat(
             const toolResult = await runAiTool(
               call.function.name,
               parsedArgs,
-              { signal: AbortSignal.timeout(60_000), invokerUid },
+              { signal: AbortSignal.timeout(90_000), invokerUid }, // Increased timeout
             )
             resultContent = JSON.stringify(toolResult)
+            
+            await onProgress?.({ 
+              type: "tool_complete", 
+              toolName: call.function.name,
+              toolResult: resultContent
+            })
           } catch (err) {
             resultContent = JSON.stringify({
               error: err instanceof Error ? err.message : String(err),
             })
+            
+            await onProgress?.({ 
+              type: "tool_error", 
+              toolName: call.function.name,
+              toolResult: resultContent
+            })
           }
 
-          const toolMsg: AiMessage = {
-            role: "tool",
-            content: null,
-            toolResult: {
-              toolCallId: call.id,
-              name: call.function.name,
-              content: resultContent,
+          return {
+            toolMsg: {
+              role: "tool" as const,
+              content: null,
+              toolResult: {
+                toolCallId: call.id,
+                name: call.function.name,
+                content: resultContent,
+              },
+              timestamp: Date.now(),
             },
-            timestamp: Date.now(),
+            llmMsg: {
+              role: "tool" as const,
+              content: resultContent,
+              tool_call_id: call.id,
+            },
           }
+        })
+
+        const toolResults = await Promise.all(toolExecutionPromises)
+        
+        for (const { toolMsg, llmMsg } of toolResults) {
           newMessages.push(toolMsg)
-          llmMessages.push({
-            role: "tool",
-            content: resultContent,
-            tool_call_id: call.id,
-          })
+          llmMessages.push(llmMsg)
         }
 
         // Continue loop — LLM may want to call more tools or produce final answer

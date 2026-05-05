@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-export const VpsProvider = z.enum(["hetzner", "digitalocean", "vultr", "lightsail"])
+export const VpsProvider = z.enum(["hetzner", "digitalocean", "vultr", "lightsail", "azure"])
 export type VpsProvider = z.infer<typeof VpsProvider>
 
 export const DeploymentStatus = z.enum([
@@ -43,6 +43,8 @@ export const DeploymentConfig = z.object({
   trafficStatsSecret: z.string().min(16).optional(),
   bandwidthUp: z.string().optional(),
   bandwidthDown: z.string().optional(),
+  profileId: z.string().optional(),
+  resourceGroup: z.string().optional(), // For Azure: existing resource group name
 })
 export type DeploymentConfig = z.infer<typeof DeploymentConfig>
 
@@ -80,6 +82,7 @@ export interface VpsProviderClient {
     region: string
     size: string
     sshKeyContent: string
+    resourceGroup?: string // Azure-specific: existing resource group
   }): Promise<VpsCreateResult>
   waitForIp(vpsId: string, timeoutMs?: number): Promise<string>
   destroyServer(vpsId: string): Promise<void>
